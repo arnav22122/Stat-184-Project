@@ -4,8 +4,8 @@ Home Advantage in the Premier League
 An exploratory data analysis of home advantage in the English Premier League across five seasons (2019/20 -- 2023/24), with a particular focus on whether home advantage was disrupted during the COVID-19 pandemic when matches were played without fans.
 Authors
 
-Arnav Patel
-Nivaan Garg
+Arnav Patel, 
+Nivaan Garg, 
 Jesunifemi Ijaware
 
 This is a final project for STAT 184 at Penn State University.
