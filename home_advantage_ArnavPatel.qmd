@@ -1,0 +1,452 @@
+---
+title: "Home Advantage in the Premier League"
+subtitle: "An Exploratory Analysis of Five Seasons (2019/20 -- 2023/24)"
+author:
+  - name: "Arnav Patel"
+  - name: "Nivaan Garg"
+  - name: "Jesunifemi Ijaware"
+date: today
+format:
+  pdf:
+    toc: true
+    number-sections: true
+    fig-pos: "H"
+    geometry: margin=1in
+    fontsize: 12pt
+execute:
+  echo: false
+  warning: false
+  message: false
+bibliography: references.bib
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+
+# PLAN: Load the packages we need for this report.
+# Using tidyverse paradigm throughout.
+
+library(tidyverse)
+library(janitor)
+library(knitr)
+```
+
+## Introduction
+
+This report investigates whether home advantage exists in the English Premier League (EPL) and whether it changed during the COVID-19 pandemic, when matches were played behind closed doors with no fans present. Understanding home advantage has practical implications for team strategy, betting markets, and broader questions about what drives performance in elite football.
+
+Our data come from football-data.co.uk [@footballdata2024] and contain results from 1,900 Premier League matches across five seasons (2019/20 through 2023/24). **This report follows an Exploratory Data Analysis (EDA) paradigm**: we do not begin with formal hypotheses or statistical tests. Instead, we use visualizations and descriptive summaries to look for patterns in the data, and we generate hypotheses about mechanisms at the end based on what we observe. All coding follows the **Tidyverse paradigm** using the `{tidyverse}` suite of packages [@tidyverse2019], including `{ggplot2}` for visualization, `{dplyr}` for data wrangling, and `{knitr}` for professional table display.
+
+## Data {#sec-data}
+
+### Data Provenance
+
+Our data were sourced directly from football-data.co.uk [@footballdata2024], a long-running publicly available repository of football match statistics compiled from official league sources. Five seasons of EPL data (2019/20 through 2023/24) were downloaded as individual CSV files from football-data.co.uk, combined into a single clean CSV, and read into R for analysis. The data were not sourced from Kaggle and have not been used in any prior course assignment.
+
+**FAIR Principles Assessment.** The dataset largely satisfies the FAIR principles [@wilkinson2016]. It is *Findable*: each season's data file is accessible at a stable, well-known URL on football-data.co.uk with a consistent naming convention. It is *Accessible*: the files are freely downloadable as plain CSV without authentication. It is *Interoperable*: CSV is a universal plain-text format readable by any statistical software; column names follow a consistent schema across all seasons. It is *Reusable*: the data are free for educational and non-commercial use, though a formal machine-readable license is not published --- a limitation worth noting.
+
+**CARE Principles Assessment.** The CARE principles (Collective Benefit, Authority to Control, Responsibility, Ethics) were developed to protect the rights of Indigenous communities over their data [@carroll2020]. This dataset concerns professional football match statistics, not data about Indigenous peoples, so CARE does not apply in the same protective sense. However, the Responsibility and Ethics dimensions are still relevant: the data involve professional athletes whose match performance data are recorded without individual consent, which is standard practice in professional sports but worth acknowledging. No personally identifying health or financial data are included.
+
+### Cases and Case Attributes
+
+**What is a case?** Each row (case) in our dataset represents a single Premier League match --- one 90-minute contest between a designated home team and a designated away team at a specific stadium. With 380 matches per season and five seasons, our data collection contains 1,900 cases in total.
+
+**Case attributes.** The Premier League records a rich set of statistics for every match. Each case in our data includes the season in which the match was played, the names of the home and away teams, and the full-time result (home win, draw, or away win). For goals, the dataset records the total number of goals scored by the home team and by the away team at full time. For attacking intent, the dataset records the total number of shots attempted by each side. For disciplinary records, the dataset records the number of yellow cards received and the number of fouls committed by each team. All goal and shot counts are recorded as raw integer counts. Yellow card and foul counts are likewise recorded as raw integer counts per match. No monetary values, distances, or Likert-scale measurements are involved.
+
+In our analysis, we focus on the following attributes:
+
+- **`fthg` / `ftag`**: Full-time goals scored by the home team and away team, respectively (integer count)
+- **`ftr`**: Full-time result, a categorical variable taking values H (home win), D (draw), or A (away win)
+- **`hs` / `as`**: Total shots taken by the home and away teams (integer count)
+- **`hy` / `ay`**: Yellow cards received by the home and away teams (integer count)
+- **`hf` / `af`**: Fouls committed by the home and away teams (integer count)
+- **`season`**: A character label identifying the season (e.g., "2019/20")
+
+```{r}
+#| label: import-data
+#| include: false
+
+# PLAN: Read in the cleaned EPL data file from the data_clean folder.
+# Then check the structure to make sure it looks right.
+
+# Read in the data
+epl_raw <- read_csv("data_clean/epl_clean.csv")
+
+# Check the data after import
+glimpse(epl_raw)
+```
+
+```{r}
+#| label: wrangle
+#| include: false
+
+# PLAN: Clean up the column names so they are easier to work with.
+# Then make new TRUE/FALSE columns for home win, draw, and away win.
+
+# Step 1: Clean column names to snake_case
+epl <- epl_raw %>%
+  clean_names()
+
+# Step 2: Check what columns we have now
+names(epl)
+
+# Step 3: Make new outcome variables based on the full-time result column
+epl <- epl %>%
+  mutate(
+    home_win = ftr == "H",
+    draw     = ftr == "D",
+    away_win = ftr == "A"
+  )
+```
+
+## Descriptive Statistics {#sec-desc}
+
+Before visualizing outcomes by season, we first examine the overall distribution of key match-level variables. @tbl-desc summarises the average and spread of goals, yellow cards, and fouls for both home and away teams across all matches.
+
+```{r}
+#| label: tbl-desc
+#| tbl-cap: "Descriptive statistics for key match-level variables across all EPL matches (2019/20 -- 2023/24)."
+
+# PLAN: Use dplyr::summarise() to compute the mean, standard deviation,
+# minimum, and maximum for each variable. Then display with kable().
+
+desc_stats <- epl %>%
+  summarise(
+    `Home Goals - Mean` = round(mean(fthg), 2),
+    `Home Goals - SD`   = round(sd(fthg), 2),
+    `Away Goals - Mean` = round(mean(ftag), 2),
+    `Away Goals - SD`   = round(sd(ftag), 2),
+    `Home Yellow - Mean` = round(mean(hy), 2),
+    `Away Yellow - Mean` = round(mean(ay), 2),
+    `Home Fouls - Mean` = round(mean(hf), 2),
+    `Away Fouls - Mean` = round(mean(af), 2)
+  )
+
+# Pivot to long format so the table reads top-to-bottom instead of being wide
+desc_stats %>%
+  pivot_longer(
+    cols      = everything(),
+    names_to  = "Statistic",
+    values_to = "Value"
+  ) %>%
+  kable(align = "lr")
+```
+
+@tbl-desc shows that home teams score more goals on average than away teams. Away teams also receive more yellow cards on average and commit more fouls. These overall patterns are consistent with a home advantage effect, and we now examine how they vary across seasons.
+
+```{r}
+#| label: season-summary
+#| include: false
+
+# PLAN: For each season, compute the percentage of home wins, draws, and
+# away wins, plus the average goals, yellow cards, and fouls for both
+# home and away teams. We will use this summary in all four figures.
+
+home_advantage <- epl %>%
+  group_by(season) %>%
+  summarise(
+    home_win_pct    = round(mean(home_win) * 100, 1),
+    draw_pct        = round(mean(draw) * 100, 1),
+    away_win_pct    = round(mean(away_win) * 100, 1),
+    avg_home_goals  = round(mean(fthg), 2),
+    avg_away_goals  = round(mean(ftag), 2),
+    avg_home_yellow = round(mean(hy), 2),
+    avg_away_yellow = round(mean(ay), 2),
+    avg_home_fouls  = round(mean(hf), 2),
+    avg_away_fouls  = round(mean(af), 2)
+  )
+```
+
+## Results {#sec-results}
+
+### Match Outcomes by Season {#sec-outcomes}
+
+@tbl-outcomes summarises the percentage of home wins, draws, and away wins in each of the five seasons, alongside average goals scored per match.
+
+```{r}
+#| label: tbl-outcomes
+#| tbl-cap: "Premier League match outcome percentages and average goals by season (2019/20 -- 2023/24). The 2020/21 season (played without fans) shows a striking reversal in home and away win rates."
+
+# PLAN: Display the season-level summary as a table using kable().
+# Rename columns to be reader-friendly first.
+
+home_advantage %>%
+  select(season, home_win_pct, draw_pct, away_win_pct,
+         avg_home_goals, avg_away_goals) %>%
+  rename(
+    Season           = season,
+    `Home Win %`     = home_win_pct,
+    `Draw %`         = draw_pct,
+    `Away Win %`     = away_win_pct,
+    `Avg Home Goals` = avg_home_goals,
+    `Avg Away Goals` = avg_away_goals
+  ) %>%
+  kable(align = "lrrrrr")
+```
+
+@tbl-outcomes shows that home teams won between 43% and 48% of matches in four of the five seasons --- a consistent advantage over away teams. The 2020/21 season is an immediate outlier: home wins dropped to 37.9% (the lowest in the dataset) while away wins climbed to 40.3% (the highest). Average home goals also fell in 2020/21 relative to adjacent seasons. These patterns motivate the visualizations that follow.
+
+```{r}
+#| label: fig-outcomes
+#| fig-cap: "Grouped bar chart of match outcome percentages by season. The 2020/21 COVID no-fans season shows a substantially lower home win bar and a substantially higher away win bar compared to all other seasons, indicating that home advantage was weakened when fans were absent."
+#| fig-alt: "Grouped bar chart showing home win, draw, and away win percentages for each Premier League season from 2019/20 to 2023/24. Each season has three side-by-side bars in dark purple (home win), light blue (draw), and bright green (away win). The 2020/21 season has a notably shorter home win bar and taller away win bar compared to all other seasons, consistent with the removal of fans during COVID-19."
+#| fig-width: 7
+#| fig-height: 4.5
+
+# PLAN: Pivot the season summary to long format, then make a grouped
+# bar chart showing the three outcome types side-by-side for each season.
+
+# Step 1: Pivot to long format so we can use 'fill' in ggplot
+outcomes_long <- home_advantage %>%
+  pivot_longer(
+    cols      = c(home_win_pct, draw_pct, away_win_pct),
+    names_to  = "result_type",
+    values_to = "percentage"
+  )
+
+# Step 2: Rename the result types to be reader-friendly
+outcomes_long <- outcomes_long %>%
+  mutate(
+    result_type = recode(result_type,
+      "home_win_pct" = "Home Win",
+      "draw_pct"     = "Draw",
+      "away_win_pct" = "Away Win"
+    )
+  )
+
+# Step 3: Build the bar chart
+ggplot(outcomes_long, aes(x = season, y = percentage, fill = result_type)) +
+  geom_col(position = "dodge", width = 0.7) +
+  scale_fill_manual(values = c(
+    "Home Win" = "#3d195b",
+    "Draw"     = "#91c0e8",
+    "Away Win" = "#00ff85"
+  )) +
+  labs(
+    title    = "Premier League Match Outcomes by Season (2019-2024)",
+    subtitle = "Home advantage nearly vanished in 2020/21 - the COVID no-fans season",
+    x        = "Season",
+    y        = "Percentage of Matches (%)",
+    fill     = "Result Type",
+    caption  = "Source: football-data.co.uk"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title      = element_text(face = "bold", size = 13),
+    plot.subtitle   = element_text(size = 10, color = "grey40"),
+    legend.position = "top"
+  )
+```
+
+@fig-outcomes displays the distribution of match outcomes across all five seasons. In four of the five seasons, home teams won between 43% and 48% of matches, consistently outperforming away teams. The central feature of the chart is the 2020/21 season: the home win bar is noticeably shorter and the away win bar is noticeably taller than in any other season. This disruption aligns exactly with the period when COVID-19 restrictions banned fans from attending matches. The draw percentage remained relatively stable across all seasons (hovering around 22--27%), which is notable --- the shift in 2020/21 appears to have transferred wins from home teams directly to away teams rather than increasing stalemates.
+
+### Average Goals Per Match {#sec-goals}
+
+```{r}
+#| label: fig-goals
+#| fig-cap: "Line chart with points showing average goals scored per match by home and away teams across five Premier League seasons. Home teams outscore away teams in every season. The gap between the two lines is smallest in 2020/21, and both teams score notably more in 2023/24."
+#| fig-alt: "Line chart with two lines distinguished by color and point shape. The dark purple line with circular points represents home teams; the bright green line with triangular points represents away teams. Home teams score more goals in every season. The gap between lines is narrowest in 2020/21 and widens again thereafter. Both lines trend upward in 2023/24."
+#| fig-width: 6.5
+#| fig-height: 4
+
+# PLAN: Pivot home and away goals to long format, then make a line chart
+# with both color and shape distinguishing the two lines.
+
+# Step 1: Pivot home and away goals into long format
+goals_long <- home_advantage %>%
+  pivot_longer(
+    cols      = c(avg_home_goals, avg_away_goals),
+    names_to  = "team_type",
+    values_to = "avg_goals"
+  )
+
+# Step 2: Rename for readability
+goals_long <- goals_long %>%
+  mutate(
+    team_type = recode(team_type,
+      "avg_home_goals" = "Home",
+      "avg_away_goals" = "Away"
+    )
+  )
+
+# Step 3: Build the line chart with both color AND shape (inclusive design)
+ggplot(goals_long, aes(x = season, y = avg_goals,
+                       color = team_type,
+                       shape = team_type,
+                       group = team_type)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 4) +
+  scale_color_manual(values = c("Home" = "#3d195b", "Away" = "#00ff85")) +
+  scale_shape_manual(values = c("Home" = 16, "Away" = 17)) +
+  labs(
+    title    = "Average Goals Per Match by Season (2019-2024)",
+    subtitle = "Home teams consistently outscore away teams across all seasons",
+    x        = "Season",
+    y        = "Average Goals Per Match",
+    color    = "Team Location",
+    shape    = "Team Location",
+    caption  = "Source: football-data.co.uk"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title      = element_text(face = "bold", size = 13),
+    plot.subtitle   = element_text(size = 10, color = "grey40"),
+    legend.position = "top"
+  )
+```
+
+@fig-goals shows the trend in average goals per match for home and away teams across all five seasons. There is a consistent positive association between playing at home and scoring more goals: the dark purple (Home) line sits above the green (Away) line in every single season. The gap between the two lines --- which represents the home scoring advantage --- is at its narrowest in 2020/21, reinforcing the finding from @fig-outcomes that home advantage weakened meaningfully during the no-fans season. Both teams' scoring increased in 2023/24, suggesting a broader trend toward more attacking football in recent seasons that warrants further investigation.
+
+### Home Win Percentage by Team {#sec-teams}
+
+```{r}
+#| label: tbl-teams
+#| tbl-cap: "Home win percentage for Premier League teams with at least 50 home matches across the five seasons (2019/20 -- 2023/24), ranked from highest to lowest."
+
+# PLAN: For each home team, count their home matches and compute the
+# percent of those matches they won. Filter to teams with at least 50
+# home matches so the percentages are meaningful, then sort.
+
+team_home <- epl %>%
+  group_by(home_team) %>%
+  summarise(
+    matches      = n(),
+    home_win_pct = round(mean(home_win) * 100, 1)
+  ) %>%
+  filter(matches >= 50) %>%
+  arrange(desc(home_win_pct))
+
+# Display as a clean kable table
+team_home %>%
+  rename(
+    Team            = home_team,
+    `Home Matches`  = matches,
+    `Home Win %`    = home_win_pct
+  ) %>%
+  kable(align = "lrr")
+```
+
+```{r}
+#| label: fig-teams
+#| fig-cap: "Horizontal bar chart of home win percentage for Premier League teams with at least 50 home matches between 2019 and 2024, sorted from highest to lowest. Bars are shaded using a gradient from light blue (lower rates) to dark purple (higher rates)."
+#| fig-alt: "Horizontal bar chart showing home win percentage for all qualifying Premier League teams. Bars are sorted so the team with the highest home win rate appears at the top. Bars are colored with a gradient from light blue at lower values to dark purple at higher values. Manchester City and Liverpool appear at the top with rates above 65%. Several mid-table and relegation-threatened clubs appear at the bottom with rates below 35%."
+#| fig-width: 7
+#| fig-height: 6
+
+# PLAN: Use coord_flip() so team names appear on the y-axis (easier to read).
+# Sort the bars using reorder() and use a color gradient based on win pct.
+
+ggplot(team_home, aes(x = reorder(home_team, home_win_pct),
+                      y = home_win_pct,
+                      fill = home_win_pct)) +
+  geom_col() +
+  scale_fill_gradient(low = "#91c0e8", high = "#3d195b") +
+  coord_flip() +
+  labs(
+    title    = "Home Win Percentage by Team (2019-2024)",
+    subtitle = "Teams with at least 50 home matches across all five seasons",
+    x        = "Team",
+    y        = "Home Win Percentage (%)",
+    fill     = "Win %",
+    caption  = "Source: football-data.co.uk"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title      = element_text(face = "bold", size = 13),
+    plot.subtitle   = element_text(size = 10, color = "grey40"),
+    legend.position = "none"
+  )
+```
+
+@fig-teams and @tbl-teams show the distribution of home win rates across all qualifying teams. There is a pronounced spread across the distribution. At the top end, traditionally dominant clubs such as Manchester City and Liverpool show home win percentages above 65%, reflecting both genuine quality and the amplifying effect of large, vocal home crowds. At the bottom end, mid-table and relegation-threatened clubs show rates below 35%, which indicates that home advantage is not uniform across teams --- some benefit substantially more than others. This heterogeneity suggests that crowd atmosphere and stadium size may interact with team quality to produce the home advantage effect, rather than pitch familiarity alone.
+
+### Referee Decisions: Yellow Cards and Fouls by Season {#sec-refs}
+
+```{r}
+#| label: fig-refs
+#| fig-cap: "Two side-by-side line charts showing average yellow cards per match (left) and average fouls per match (right) for home and away teams across five EPL seasons. Away teams receive more yellow cards and commit more fouls in every season, but both gaps narrow in 2020/21 when fans were absent."
+#| fig-alt: "Two side-by-side faceted line charts. Each chart shows two lines distinguished by color (dark purple for home, bright green for away) and point shape (circle for home, triangle for away). In the left panel (yellow cards), the away line consistently sits above the home line, with the smallest gap in 2020/21. In the right panel (fouls), the same pattern holds. Both panels share the same axis styling and legend."
+#| fig-width: 8
+#| fig-height: 4.5
+
+# PLAN: Pivot the four referee-related columns to long format, then build
+# a faceted line chart showing yellow cards (left) and fouls (right).
+
+# Step 1: Pivot the four columns we need to long format
+ref_long <- home_advantage %>%
+  pivot_longer(
+    cols      = c(avg_home_yellow, avg_away_yellow,
+                  avg_home_fouls, avg_away_fouls),
+    names_to  = "metric",
+    values_to = "value"
+  )
+
+# Step 2: Add a Home/Away column and a metric type column
+ref_long <- ref_long %>%
+  mutate(
+    team_type = if_else(str_detect(metric, "home"), "Home", "Away"),
+    metric_type = if_else(
+      str_detect(metric, "yellow"),
+      "Avg Yellow Cards Per Match",
+      "Avg Fouls Per Match"
+    )
+  )
+
+# Step 3: Build the faceted line chart
+ggplot(ref_long, aes(x = season, y = value,
+                     color = team_type,
+                     shape = team_type,
+                     group = team_type)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 4) +
+  facet_wrap(~ metric_type, scales = "free_y") +
+  scale_color_manual(values = c("Home" = "#3d195b", "Away" = "#00ff85")) +
+  scale_shape_manual(values = c("Home" = 16, "Away" = 17)) +
+  labs(
+    title    = "Referee Decisions: Home vs. Away Teams by Season (2019-2024)",
+    subtitle = "Away teams are penalised more - but the gap narrows without fans in 2020/21",
+    x        = "Season",
+    y        = "Average Per Match",
+    color    = "Team Location",
+    shape    = "Team Location",
+    caption  = "Source: football-data.co.uk"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title      = element_text(face = "bold", size = 13),
+    plot.subtitle   = element_text(size = 10, color = "grey40"),
+    legend.position = "top",
+    strip.text      = element_text(face = "bold")
+  )
+```
+
+@fig-refs provides evidence for a possible mechanism driving home advantage: differential treatment by referees. In every season, away teams receive more yellow cards and commit more recorded fouls per match than home teams. The away team yellow card line consistently sits above the home team line, and the fouls panel shows the same direction of association. Crucially, both gaps are at their narrowest in 2020/21, the season played without fans. This pattern is consistent with the hypothesis that crowd noise influences referee decision-making --- when the crowd is absent, referees appear to treat home and away teams more equitably. This finding connects directly to @fig-outcomes and @fig-goals: if crowd pressure partially drives biased officiating, and that pressure was removed in 2020/21, we would expect home advantage to weaken across multiple metrics simultaneously --- which is precisely what we observe.
+
+## Conclusion
+
+Our exploratory analysis provides consistent evidence that home advantage exists in the Premier League. Across the four seasons played with fans present, home teams won approximately 43--48% of matches, consistently outscored away teams in goals, and received fewer yellow cards and fewer recorded fouls than their opponents. The most striking finding is from the 2020/21 COVID season: removing fans from stadiums coincided with a drop of nearly 8 percentage points in home win rates, the narrowing of the goal-scoring gap, and a more equitable distribution of referee sanctions. Taken together, these patterns point toward crowd presence --- and its psychological effects on both players and referees --- as a primary mechanism through which home advantage operates in elite football.
+
+Several directions for future analysis present themselves. First, does stadium capacity or average attendance moderate the size of home advantage at the team level? Second, would a formal statistical test (e.g., a proportion test or regression controlling for team quality) confirm the size of the COVID effect? Third, are the patterns we observed consistent across other domestic leagues in Europe, or are they specific to the EPL's crowd culture? These questions fall beyond the scope of this exploratory report but represent natural next steps.
+
+## Contributions
+
+- **Arnav Patel**: Data import and wrangling pipeline (Sections 2--3); descriptive statistics table; Sections 3 and 4.1--4.2 write-up.
+- **Nivaan Garg**: Figures 1, 2, and 3; team-level analysis (Section 4.3); Introduction and Conclusion.
+- **Jesunifemi Ijaware**: Figure 4 (referee analysis); FAIR/CARE data provenance section; overall editing and code review.
+
+## References
+
+::: {#refs}
+:::
+
+\newpage
+
+## Code Appendix {.unnumbered}
+
+```{r}
+#| label: code-appendix
+#| ref-label: !expr knitr::all_labels()
+#| echo: true
+#| eval: false
+```
